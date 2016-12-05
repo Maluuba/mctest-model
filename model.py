@@ -79,7 +79,7 @@ class PHM(object):
         if self.embed_type == 'random':
             self.W2V = None
         else:
-            embedding = H5EmbeddingManager('GoogleNews-vectors-negative300.h5', mode='in-memory')
+            embedding = H5EmbeddingManager('GoogleNews-vectors-negative300.bin.gz.h5', mode='in-memory')
             self.W2V = embedding.init_word_embedding(self.data_options['id2word'], dim_size=self.EMBED_SIZE,
                                                      mode=self.embed_type)
             del embedding
