@@ -1,8 +1,4 @@
 # encoding: utf-8
-try:
-    import gpuselect
-except:
-    print('gpuselect is not installed')
 import os
 import logging
 import numpy as np
