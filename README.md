@@ -34,7 +34,7 @@ If you find this paper useful in your research, please cite:
 * Theano 0.8
 
 ## How to run a test
-* Download Google's pre-trained word2vec ('.bin/gz'), and convert it to h5 format using the script `embedding_2_h5.py`.
+* Download Google's pre-trained word2vec (`.bin/gz`), and convert it to h5 format using the script `embedding_2_h5.py`.
 * Open a terminal and input `python run.py`. The results on test would be around 70% accuracy.
 * If you want to test different settings, you can change the parameters in `model.yaml`.
 
