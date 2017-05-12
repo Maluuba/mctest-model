@@ -6,6 +6,7 @@ import logging
 import yaml
 import theano
 import numpy as np
+import pandas
 from keras.optimizers import Adam, Adadelta, Adagrad, RMSprop, SGD
 from keras.regularizers import l2
 from keras.layers import Input, RepeatVector, Dense, Dropout, merge, Activation
@@ -79,11 +80,17 @@ class PHM(object):
         if self.embed_type == 'random':
             self.W2V = None
         else:
-            embedding = H5EmbeddingManager('GoogleNews-vectors-negative300.bin.gz.h5', mode='in-memory')
-            self.W2V = embedding.init_word_embedding(self.data_options['id2word'], dim_size=self.EMBED_SIZE,
-                                                     mode=self.embed_type)
-            del embedding
-            self.W2V = [self.W2V]
+            # embedding = H5EmbeddingManager('GoogleNews-vectors-negative300.bin.gz.h5', mode='in-memory')
+            # embedding = H5EmbeddingManager('/opt/dnn/word_embedding/glove.840B.300d.pandas.hdf5', mode='in-memory')
+            # self.W2V = embedding.init_word_embedding(self.data_options['id2word'], dim_size=self.EMBED_SIZE,
+            #                                          mode=self.embed_type)
+            # del embedding
+            # self.W2V = [self.W2V]
+            embed_file = '/opt/dnn/word_embedding/glove.840B.300d.pandas.hdf5'
+            self.W2V = pandas.read_hdf(embed_file)
+            self.W2V = self.W2V.loc[self.data_options['id2word']]
+            self.W2V.fillna(1e-16, inplace=True)
+            self.W2V = [self.W2V.as_matrix()]
 
         self.model_name = "PHM"
         self.inputs_nodes = dict()
