@@ -2,6 +2,7 @@
 import os
 import logging
 import numpy as np
+import codecs
 
 from keras.callbacks import EarlyStopping
 from setup_logger import setup_logging
@@ -11,6 +12,7 @@ from callbacks import LearningRateCutting, Evaluation
 from keras.callbacks import ModelCheckpoint
 import cPickle as pickle
 import time
+from examcomprehension.datasets.race import PHMFeature
 
 logger = logging.getLogger(__name__)
 
@@ -26,38 +28,67 @@ class McDataset(object):
         print 'init dataset with h5 file.'
         meta_data = {}
         print 'data_path:', self.data_path
-        f = h5py.File(self.data_path, 'r')
-        dataset = f[self.dataset_name]
-        print f.keys()
-        print dataset.keys()
-        print dataset['data'].keys()
-        for key in dataset.attrs:
-            meta_data[key] = dataset.attrs[key]
+        # f = h5py.File(self.data_path, 'r')
+        # dataset = f[self.dataset_name]
+
+        # for key in dataset.attrs:
+        #     meta_data[key] = dataset.attrs[key]
 
         # words_flatten = f['words_flatten'][0]
         # id2word = words_flatten.split('\n')
-        id2word =  f['vocab'][:]
-        # assert len(self.id2word) == f.attrs['vocab_len'], "%s != %s" % (len(id2word), f.attrs['vocab_len'])
-        word2id = dict(zip(id2word, range(len(id2word))))
-        meta_data['id2word'] = id2word
-        meta_data['word2id'] = word2id
-        meta_data['idfs'] = dataset['idfs'][:]
+        # id2word =  f['vocab'][:]
+        # # assert len(self.id2word) == f.attrs['vocab_len'], "%s != %s" % (len(id2word), f.attrs['vocab_len'])
+        # word2id = dict(zip(id2word, range(len(id2word))))
+        # meta_data['id2word'] = id2word
+        # meta_data['word2id'] = word2id
+        # meta_data['idfs'] = dataset['idfs'][:]
 
-        meta_data['answer_size'] = dataset['data/train/input_answer'].shape[1]
-        meta_data['n_s'] = dataset['data/train/input_story'].shape[1]
-        meta_data['n_voc'] = len(id2word)
-        meta_data['n_w_a'] = dataset['data/train/input_answer'].shape[-1]
-        meta_data['n_w_q'] = dataset['data/train/input_question'].shape[-1]
-        meta_data['n_w_qa'] = dataset['data/train/input_question_answer'].shape[-1]
-        meta_data['n_w_s'] = dataset['data/train/input_story'].shape[-1]
+        # meta_data['answer_size'] = dataset['data/train/input_answer'].shape[1]
+        # meta_data['n_s'] = dataset['data/train/input_story'].shape[1]
+        # meta_data['n_voc'] = len(id2word)
+        # meta_data['n_w_a'] = dataset['data/train/input_answer'].shape[-1]
+        # meta_data['n_w_q'] = dataset['data/train/input_question'].shape[-1]
+        # meta_data['n_w_qa'] = dataset['data/train/input_question_answer'].shape[-1]
+        # meta_data['n_w_s'] = dataset['data/train/input_story'].shape[-1]
         # meta_data['w2v_path'] = '/opt/dnn/word_embedding/glove.840B.300d.pandas.hdf5'
         # meta_data['stop_words_file'] = '/home/xihlin/workspace/ExamComprehension/examcomprehension/datasets/stopwords.txt'
 
+        with codecs.open('stopwords.txt', 'r', 'utf-8') as f:
+            stopwords = [l.strip() for l in f]
+        phm_data = PHMFeature(stopwords=stopwords, saved_h5=self.data_path)
+        id2word =  phm_data.vocab
+        word2id = dict(zip(id2word, range(len(id2word))))
+        meta_data['idfs'] = phm_data.idfs(self.dataset_name)
+        meta_data['id2word'] = id2word
+        meta_data['word2id'] = word2id
+
+        # dataset = getattr(phm_data, self.dataset_name)
+        # meta_data['answer_size'] = dataset['train']['input_answer'].shape[1]
+        # meta_data['n_s'] = dataset['train']['input_story'].shape[1]
+        # meta_data['n_voc'] = len(id2word)
+        # meta_data['n_w_a'] = dataset['train']['input_answer'].shape[-1]
+        # meta_data['n_w_q'] = dataset['train']['input_question'].shape[-1]
+        # meta_data['n_w_qa'] = dataset['train']['input_question_answer'].shape[-1]
+        # meta_data['n_w_s'] = dataset['train']['input_story'].shape[-1]
+
+        meta_data['answer_size'] = phm_data.max_n_options
+        meta_data['n_s'] = phm_data.max_n_sents 
+        meta_data['n_voc'] = len(id2word)
+        meta_data['n_w_a'] = phm_data.max_option_len 
+        meta_data['n_w_q'] = phm_data.max_question_len
+        meta_data['n_w_qa'] = phm_data.max_question_option_len 
+        meta_data['n_w_s'] = phm_data.max_sent_len 
+
+        meta_data['max_len_input_story_attentive'] = phm_data.max_article_len
+        for k, v in phm_data._cache['high']['data']['train'].iteritems():
+            meta_data[k + '_shape'] = v.shape
+
+        dataset = getattr(phm_data, self.dataset_name)
         data = {}
-        for key in dataset['data']:
+        for key in dataset:  # 'train', 'valid', 'test'
             data[key] = {}
-            for inner_key in dataset['data'][key]:
-                data[key][inner_key] = dataset['data'][key][inner_key][:]
+            for inner_key in dataset[key]:  # input_story, etc
+                data[key][inner_key] = dataset[key][inner_key]
                 shape_key = inner_key+"_shape"
                 if not shape_key in meta_data:
                     meta_data[shape_key] = data[key][inner_key].shape
@@ -68,12 +99,11 @@ class McDataset(object):
         print meta_data.keys()
         self.meta_data = meta_data
         self.data = data
-        f.close()
+        # f.close()
         logger.info('finish init dataset with %s' % self.data_path)
 
 
-def train_option(data_path, which_dataset, update_dict=None, EPOCHS=50):
-    BATCH_SIZE = 64
+def train_option(data_path, which_dataset, update_dict=None, EPOCHS=50, BATCH_SIZE=64):
     patience = 10
     dataset = McDataset(data_path, which_dataset)
     data = dataset.data
@@ -106,12 +136,13 @@ def train_option(data_path, which_dataset, update_dict=None, EPOCHS=50):
                   shuffle=True, callbacks=callbacks_list
                   )
         with open('race_middle.model.pickle', 'w') as f:
-            pickle.dump(graph, f)
-    except KeyboardInterrupt:
+            pickle.dump(graph.get_weights(), f)
+    except BaseException as e:
         logger.info('interrupted by the user, and continue to eval on test.')
         time.sleep(2)
         with open('race_middle.model.pickle', 'w') as f:
-            pickle.dump(graph, f)
+            pickle.dump(graph.get_weights(), f)
+        raise e
 
 
 if __name__ == '__main__':
@@ -121,7 +152,8 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--datapath", type=str, help="path to hdf5 data")
     parser.add_argument("-d", "--dataset", type=str, default='middle', help="which dataset")
     parser.add_argument("-e", "--epoch", type=int, default=10, help="number of epoch to train.")
+    parser.add_argument("-b", "--batch", type=int, default=64, help="batch size.")
     args = parser.parse_args()
 
-    train_option(args.datapath, args.dataset, EPOCHS=args.epoch)
+    train_option(args.datapath, args.dataset, EPOCHS=args.epoch, BATCH_SIZE=args.batch)
     logger.info("**************Train_eval finished******************")

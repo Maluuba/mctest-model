@@ -47,7 +47,7 @@ def masked_softmax(x, m=None, axis=[-1]):
 
 def masked_mean(inp, axis=None):
     # n_b x n_s x 4 x n_w_a: inp
-    _mask = T.neq(inp, 0).astype(floatX)
+    _mask = T.neq(inp, 0).astype(floatX) * T.neq(inp, 1).astype(floatX)
     s_mask = T.sum(_mask, axis=axis, keepdims=True) + 0.00001  # to avoid nan error due to padded sentence.
     s = inp / s_mask
     s.name = 'mean'

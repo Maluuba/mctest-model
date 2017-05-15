@@ -238,6 +238,7 @@ class PHM(object):
         for ngram in self.model_config['PHM']['ngram_inputs']:
             inputs.append('input_story_%sgram' % ngram)
             outputs.append('__w_story1_%sgram' % ngram)
+        # from ipdb import set_trace; set_trace()
         for input, output in zip(inputs, outputs):
             nodes[output] = w_story1(self._get_node(input))
 
