@@ -168,6 +168,8 @@ class NTimeDistributed(Wrapper):
         super(NTimeDistributed, self).__init__(layer, **kwargs)
 
     def build(self, input_shape):
+        first_n = len(input_shape) - 1 if not self.first_n else self.first_n
+        print('build:', first_n)
         assert len(input_shape) >= 3
         self.input_spec = [InputSpec(shape=input_shape)]
         if K._BACKEND == 'tensorflow':
@@ -181,30 +183,37 @@ class NTimeDistributed(Wrapper):
                                 'the first layer has '
                                 'an "input_shape" or "batch_input_shape" '
                                 'argument, including the time axis.')
-        child_input_shape = (input_shape[0],) + input_shape[self.first_n:]
+        child_input_shape = (input_shape[0],) + input_shape[first_n:]
         if not self.layer.built:
             self.layer.build(child_input_shape)
             self.layer.built = True
         super(NTimeDistributed, self).build()
 
     def get_output_shape_for(self, input_shape):
-        child_input_shape = (input_shape[0],) + input_shape[self.first_n:]
+        first_n = len(input_shape) - 1 if not self.first_n else self.first_n
+        print('get_output_shape_for:', first_n)
+        child_input_shape = (input_shape[0],) + input_shape[first_n:]
         child_output_shape = self.layer.get_output_shape_for(child_input_shape)
-        timesteps = tuple(input_shape[1:self.first_n])
+        timesteps = tuple(input_shape[1:first_n])
         return (child_output_shape[0],) + timesteps + child_output_shape[1:]
 
     def call(self, X, mask=None):
-        input_shape = self.input_spec[0].shape
+        first_n = K.ndim(X) - 1 if not self.first_n else self.first_n
+        print('call:', first_n)
+        # input_shape = self.input_spec[0].shape
         # no batch size specified, therefore the layer will be able
         # to process batches of any size
         # we can go with reshape-based implementation for performance
         tensor_input_shape = K.shape(X)
-        input_length = tuple(tensor_input_shape[:self.first_n])
-        X = K.reshape(X, (-1,) + tuple(tensor_input_shape[self.first_n:]))  # nb_samples * ... *timesteps, ...)
+        input_length = tuple(tensor_input_shape[:first_n])
+        X = K.reshape(X, (-1,) + tuple(tensor_input_shape[first_n:]))  # nb_samples * ... *timesteps, ...)
         y = self.layer.call(X)  # (nb_samples * timesteps, ...)
         # (nb_samples, timesteps, ...)
-        output_shape = self.get_output_shape_for(input_shape)
-        y = K.reshape(y, input_length + output_shape[self.first_n:])
+        print('call')
+        # output_shape = self.get_output_shape_for(input_shape)
+        # output_shape = tuple(K.shape(y)[1:])
+        # y = K.reshape(y, input_length + output_shape[first_n:])
+        y = K.reshape(y, input_length + tuple(K.shape(y)[1:]))
         return y
 
     def __call__(self, x, mask=None):
@@ -214,6 +223,7 @@ class NTimeDistributed(Wrapper):
         if the second dim is different the first one.
         The second dim shouldn't affect anything.
         '''
+        print('-'*20)
         if not self.built:
             # raise exceptions in case the input is not compatible
             # with the input_spec specified in the layer constructor
