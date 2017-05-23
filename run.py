@@ -3,16 +3,17 @@ import os
 import logging
 import numpy as np
 import codecs
+import shutil
 
 from keras.callbacks import EarlyStopping
 from setup_logger import setup_logging
 
 from model import PHM
-from callbacks import LearningRateCutting, Evaluation
-from keras.callbacks import ModelCheckpoint
+from callbacks import LearningRateCutting, Evaluation, ModelCheckpoint
 import cPickle as pickle
 import time
-from examcomprehension.datasets.race import PHMFeature
+from datasets.race import PHMFeature
+from save_model import save_weights
 
 logger = logging.getLogger(__name__)
 
@@ -84,10 +85,16 @@ class McDataset(object):
             meta_data[k + '_shape'] = v.shape
 
         dataset = getattr(phm_data, self.dataset_name)
+        if self.dataset_name != 'middle':
+            dataset['middle/test'] = phm_data.middle['test']
+        if self.dataset_name != 'high':
+            dataset['high/test'] = phm_data.high['test']
         data = {}
         for key in dataset:  # 'train', 'valid', 'test'
+            print('key=%s' % key)
             data[key] = {}
             for inner_key in dataset[key]:  # input_story, etc
+                print('inner_key=%s' % inner_key)
                 data[key][inner_key] = dataset[key][inner_key]
                 shape_key = inner_key+"_shape"
                 if not shape_key in meta_data:
@@ -103,23 +110,30 @@ class McDataset(object):
         logger.info('finish init dataset with %s' % self.data_path)
 
 
-def train_option(data_path, which_dataset, update_dict=None, EPOCHS=50, BATCH_SIZE=64):
+def train_option(data_path, which_dataset, model_path, update_dict=None, EPOCHS=50, BATCH_SIZE=64):
     patience = 10
     dataset = McDataset(data_path, which_dataset)
     data = dataset.data
-    train_data, valid_data, test_data = data['train'], data['valid'], data['test']
+    train_data = data.pop('train')
+    valid_data = data.pop('valid')
+    test_data = data
 
     lr_cutting = LearningRateCutting(patience=1, cut_ratio=0.8)  # 0.5
-    eval_callback = Evaluation((test_data, test_data['y_hat']), monitor='acc')
-    checkpoint = ModelCheckpoint('race_middle.model', monitor='val_acc', save_best_only=True)
     callbacks_list = [
                       EarlyStopping(patience=patience, verbose=1, monitor='val_acc'),
                       lr_cutting,
-                      eval_callback,
-                      # checkpoint,
                       ]
+    for k, v in test_data.iteritems():
+        eval_callback = Evaluation((v, v['y_hat']), monitor='acc', name=k)
+        callbacks_list.append(eval_callback)
+    checkpoint = ModelCheckpoint(os.path.join(model_path, 'model.h5'),
+                                 monitor='val_acc', save_best_only=True)
+    callbacks_list.append(checkpoint)
 
-    model = PHM('model.yaml', dataset.meta_data, None, update_dict=update_dict)
+    model_yaml_path = os.path.join(model_path, 'model.yaml')
+    if not os.path.exists(model_yaml_path):
+        shutil.copyfile('model.yaml', model_yaml_path)
+    model = PHM(model_yaml_path, dataset.meta_data, None, update_dict=update_dict)
     graph = model.build()
     # from ipdb import set_trace; set_trace()
     for i, node in enumerate(graph.get_layer('membedding_1').inbound_nodes):
@@ -135,13 +149,10 @@ def train_option(data_path, which_dataset, update_dict=None, EPOCHS=50, BATCH_SI
                   validation_data=[valid_data, valid_data['y_hat']], batch_size=BATCH_SIZE, nb_epoch=EPOCHS, verbose=1,
                   shuffle=True, callbacks=callbacks_list
                   )
-        with open('race_middle.model.pickle', 'w') as f:
-            pickle.dump(graph.get_weights(), f)
+        # save_weights(graph, os.path.join(model_path, 'model.h5'))
     except BaseException as e:
         logger.info('interrupted by the user, and continue to eval on test.')
-        time.sleep(2)
-        with open('race_middle.model.pickle', 'w') as f:
-            pickle.dump(graph.get_weights(), f)
+        # save_weights(graph, os.path.join(model_path, 'model.h5'))
         raise e
 
 
@@ -149,11 +160,14 @@ if __name__ == '__main__':
     import argparse
     setup_logging(default_path='logging.yaml', default_level=logging.INFO)
     parser = argparse.ArgumentParser(description="train option model and print out results.")
+    parser.add_argument("-m", "--model-path", type=str, help="directory to save model")
     parser.add_argument("-p", "--datapath", type=str, help="path to hdf5 data")
     parser.add_argument("-d", "--dataset", type=str, default='middle', help="which dataset")
     parser.add_argument("-e", "--epoch", type=int, default=10, help="number of epoch to train.")
     parser.add_argument("-b", "--batch", type=int, default=64, help="batch size.")
     args = parser.parse_args()
 
-    train_option(args.datapath, args.dataset, EPOCHS=args.epoch, BATCH_SIZE=args.batch)
+    if not os.path.exists(args.model_path):
+        os.makedirs(args.model_path)
+    train_option(args.datapath, args.dataset, args.model_path, EPOCHS=args.epoch, BATCH_SIZE=args.batch)
     logger.info("**************Train_eval finished******************")

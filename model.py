@@ -329,11 +329,11 @@ class PHM(object):
         if trainable_word_mlp:
             story_word_dense = NTimeDistributed(
                 Dense(D, init="identity", activation=activation, W_regularizer=l2(mlp_l2),
-                      trainable=trainable_word_mlp), first_n=3)
+                      trainable=trainable_word_mlp), first_n=None)  # None = infered, depends on input dims
             # q mlps for word and distance scores
             q_or_a_word_dense = NTimeDistributed(
                 Dense(D, init="identity", activation=activation, W_regularizer=l2(mlp_l2),
-                      trainable=trainable_word_mlp), first_n=3)
+                      trainable=trainable_word_mlp), first_n=None)
         else:
             linear_activation = Activation('linear')
             story_word_dense = linear_activation
@@ -361,6 +361,7 @@ class PHM(object):
         outputs = ['question_word_mlp', 'answer_word_mlp', 'qa_word_mlp']
         for input, output in zip(inputs, outputs):
             nodes[output] = q_or_a_word_dense(self._get_node(input))
+            print(nodes[output]._keras_shape, K.ndim(nodes[output]))
 
         # SIMILARITY MATRICES
         # first for word scores
