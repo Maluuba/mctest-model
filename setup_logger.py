@@ -5,6 +5,10 @@ import yaml
 
 __author__ = 'jeffye'
 
+try:
+        raw_input          # Python 2
+except NameError:
+        raw_input = input  # Python 3
 
 def setup_logging(
         default_path='config/logging.yaml',
