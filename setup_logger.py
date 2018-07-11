@@ -1,14 +1,12 @@
-import os
 import logging
+import os
 import time
 import yaml
 
+from six.moves import input
+
 __author__ = 'jeffye'
 
-try:
-        raw_input          # Python 2
-except NameError:
-        raw_input = input  # Python 3
 
 def setup_logging(
         default_path='config/logging.yaml',
@@ -44,7 +42,7 @@ def add_time_2_log_filename(config):
 
 def goal_prompt(logger, prompt='What are you testing in this experiment? '):
     print("            ***************************")
-    goal = raw_input(prompt)
+    goal = input(prompt)
     logger.info("            ***************************")
     logger.info("TEST GOAL: %s" % goal)
 
