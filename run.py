@@ -20,7 +20,7 @@ class McDataset(object):
 
     def _load(self):
         import h5py
-        print 'init dataset with h5 file.'
+        print('init dataset with h5 file.')
         meta_data = {}
         f = h5py.File(self.data_path, 'r')
         dataset = f[self.dataset_name]
